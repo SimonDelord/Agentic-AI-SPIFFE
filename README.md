@@ -42,6 +42,7 @@ Typical pieces:
 | **Tools** | An **MCP server** in the same pod: incident read/update against PostgreSQL. |
 | **Loop** | Send context to the model → if it asks to call a tool, run it and send the result back → repeat until it gives a final answer. |
 | **Workload identity** | In this demo: a SPIFFE ID on the pod, used for mTLS to Postgres. The model never sees a database password. |
+| **Observability** | **MLflow** on OpenShift AI: one trace per run, spanning LLM calls and MCP tool calls. |
 
 A minimal loop looks like this:
 
@@ -65,12 +66,14 @@ while True:
 That is the whole idea. Frameworks (LangChain, LangGraph, CrewAI, and so on) wrap this loop. For this demo: one agent process (MCP **client** + OpenAI-compatible client to OpenShift AI), one small MCP **server** beside it, two pods.
 
 ```
-                         OpenShift AI
-                    (KServe / vLLM model)
-                   same OpenAI-compatible URL
-                            │
-              ┌─────────────┴─────────────┐
-              ▼                           ▼
+                    OpenShift AI
+         ┌──────────────┴──────────────┐
+         │  KServe / vLLM (LLM)        │
+         │  MLflow (traces / runs)     │
+         └──────┬──────────────┬───────┘
+                │              │
+     LLM chat   │              │  traces (LLM + MCP spans)
+                ▼              ▲
         ┌─────────────────┐         ┌─────────────────┐
         │  Agent A (pod)  │         │  Agent B (pod)  │
         │  MCP client     │         │  MCP client     │
@@ -108,6 +111,7 @@ What this demo assumes you already have (or will stand up) on the cluster:
 - OpenShift AI installed
 - A data science project with a single-model serving runtime
 - One chat-capable model reachable at `MODEL_URL`
+- MLflow on OpenShift AI (tracking URI in the same data science project)
 
 What the agent needs from that endpoint: `POST /v1/chat/completions` (and later, tool-calling if the served model supports it). SPIFFE is still on **agent → PostgreSQL** first; putting SVIDs on **agent → the model server** can come after.
 
@@ -134,16 +138,62 @@ The task both agents get is the same messy incident: triage it (severity, owner,
 
 ---
 
+## Observability: MLflow on OpenShift AI
+
+SPIFFE tells you **who** connected. MLflow tells you **what the agent did** with the LLM and the MCP server.
+
+Use **MLflow tracing** hosted by OpenShift AI (not a separate LLM-ops product). Each incident run is one MLflow trace. Nested spans show every hop in the loop:
+
+```text
+trace  (incident-1042, agent-a, spiffe://.../agent-a)
+├── llm.chat                     OpenShift AI model: prompt in, completion out
+├── mcp.get_incident             tool args + result
+├── mcp.get_service
+├── mcp.list_similar_incidents
+├── llm.chat                     second think, after tools
+└── mcp.update_incident          write-back to PostgreSQL
+```
+
+Agent B is a second trace: same `incident_id`, different `spiffe_id`. In the MLflow UI you compare tool order, arguments, model output, and latency.
+
+Tag every trace with:
+
+- `agent` (`agent-a` / `agent-b`)
+- `spiffe_id` (from the workload SVID, not from the prompt)
+- `incident_id`
+
+That is how a MLflow trace and a Postgres row join.
+
+How it is wired:
+
+- Agent pods get `MLFLOW_TRACKING_URI` (OpenShift AI MLflow) plus `MODEL_URL` / `MODEL_NAME`
+- The MCP **client** (agent loop) starts the parent trace
+- Each OpenAI-compatible call to the in-cluster model is a child span (for example `mlflow.openai.autolog()`)
+- Each MCP tool call (`get_incident`, `update_incident`, …) is a child span
+- OpenTelemetry underneath is fine; MLflow on OpenShift AI is the UI for this demo
+
+MLflow does **not** replace identity audit:
+
+| You need to see | Where it lives |
+|-----------------|----------------|
+| Why the model chose that severity, which MCP tools ran, in which order | **MLflow traces** (OpenShift AI) |
+| That Postgres accepted this workload, and who wrote the row | **SPIFFE + PostgreSQL** (session logs, `agent_spiffe_id` on the incident) |
+| That SPIRE issued this SVID | **SPIRE / workload attestation** |
+
+MLflow will not show the X.509 handshake. Postgres will not show the prompt. Correlate them with `incident_id` + `spiffe_id`.
+
+---
+
 ## What we compare
 
 Not only the final paragraph of text. For each run, capture:
 
-| Artifact | Why it matters |
-|----------|----------------|
-| Model output | The visible answer; often diverges even with the same prompt. |
-| Tool calls | Which tools ran, in which order, with which arguments. |
-| SQL | What actually hit PostgreSQL. |
-| DB side effects | Rows inserted or updated, stamped with the agent’s SPIFFE ID. |
+| Artifact | Where you look | Why it matters |
+|----------|----------------|----------------|
+| Model output | MLflow `llm.chat` spans | The visible answer; often diverges even with the same prompt. |
+| MCP tool calls | MLflow `mcp.*` spans | Which tools ran, in which order, with which arguments. |
+| SQL / writes | MCP spans + Postgres | What actually hit PostgreSQL. |
+| DB side effects | Postgres row + `agent_spiffe_id` | Who wrote the update, cryptographically. |
 
 Agent A and Agent B may write different SQL for the same task. The database can still record **who** did it, because the connection used a different SVID.
 
@@ -158,7 +208,7 @@ Keep everything identical except identity:
 - Same tool list
 - Different ServiceAccounts → different SPIFFE IDs
 
-Store both runs and diff them. Divergence is expected. You cannot fingerprint an agent from its prose; you *can* from its SVID.
+Store both runs as MLflow traces (and optionally as files under `compare/`) and diff them. Divergence is expected. You cannot fingerprint an agent from its prose; you *can* from its SVID.
 
 ## Phase 2 — PostgreSQL with SPIFFE
 
@@ -186,13 +236,13 @@ This repo starts as the design. Implementation can stay small:
 ├── mcp-server/               # incident tools; SPIFFE mTLS to Postgres
 │   ├── server.py
 │   └── requirements.txt
-├── compare/                  # collect and diff the two runs
+├── compare/                  # optional local diffs; primary compare is MLflow
 └── k8s/                      # two ServiceAccounts, two ClusterSPIFFEID, one Postgres
 ```
 
-Same image (agent + MCP server), two SPIRE registrations, one OpenShift AI model, one database.
+Same image (agent + MCP server), two SPIRE registrations, one OpenShift AI model, one MLflow tracking server, one database.
 
-Agent pods get `MODEL_URL` and `MODEL_NAME` from a ConfigMap. They do not get a database password.
+Agent pods get `MODEL_URL`, `MODEL_NAME`, and `MLFLOW_TRACKING_URI` from a ConfigMap. They do not get a database password.
 
 ---
 
@@ -200,6 +250,8 @@ Agent pods get `MODEL_URL` and `MODEL_NAME` from a ConfigMap. They do not get a 
 
 - [SPIFFE-SPIRE-demo](https://github.com/SimonDelord/SPIFFE-SPIRE-demo) — SPIFFE/SPIRE on OpenShift, including the EDB/PostgreSQL mTLS use case
 - [SPIFFE-PostgreSQL](https://github.com/SimonDelord/SPIFFE-PostgreSQL) — X.509 and JWT SVID authentication to PostgreSQL
-- [OpenShift AI](https://www.redhat.com/en/technologies/cloud-computing/openshift/openshift-ai) — in-cluster model serving (KServe / vLLM)
+- [OpenShift AI](https://www.redhat.com/en/technologies/cloud-computing/openshift/openshift-ai) — in-cluster model serving (KServe / vLLM) and MLflow
+- [MLflow tracing](https://mlflow.org/docs/latest/genai/tracing/) — LLM and MCP spans per agent run
+- [How AI observability works with MLflow](https://developers.redhat.com/articles/2026/08/26/how-ai-observability-works-mlflow) — Red Hat on agent traces
 - [Model Context Protocol](https://modelcontextprotocol.io/) — agent (client) to incident tools (server)
 - [SPIFFE](https://spiffe.io/) / [SPIRE](https://spiffe.io/docs/latest/spire-about/)

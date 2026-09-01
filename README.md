@@ -162,7 +162,7 @@ Tag every trace with:
 - `spiffe_id` (from the workload SVID, not from the prompt)
 - `incident_id`
 
-That is how a MLflow trace and a Postgres row join.
+That is how an MLflow trace and a Postgres row join.
 
 How it is wired:
 

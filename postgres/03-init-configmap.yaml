@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  namespace: agentic-db
+data:
+  01-schema.sql: |
+    CREATE TABLE IF NOT EXISTS services (
+      name TEXT PRIMARY KEY,
+      team TEXT NOT NULL,
+      description TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS incidents (
+      id INTEGER PRIMARY KEY,
+      title TEXT NOT NULL,
+      alert_text TEXT NOT NULL,
+      severity TEXT,
+      owner TEXT,
+      root_cause TEXT,
+      summary TEXT,
+      agent_name TEXT,
+      updated_at TIMESTAMPTZ DEFAULT now()
+    );
+
+    CREATE TABLE IF NOT EXISTS agent_writes (
+      id SERIAL PRIMARY KEY,
+      incident_id INTEGER NOT NULL REFERENCES incidents(id),
+      agent_name TEXT NOT NULL,
+      payload JSONB NOT NULL,
+      written_at TIMESTAMPTZ DEFAULT now()
+    );
+
+    INSERT INTO services (name, team, description) VALUES
+      ('checkout-api', 'payments', 'Public checkout HTTP API'),
+      ('payments-worker', 'payments', 'Async payments processor'),
+      ('postgres-checkout', 'platform', 'Checkout primary database')
+    ON CONFLICT (name) DO NOTHING;
+
+    INSERT INTO incidents (id, title, alert_text, severity, owner, root_cause, summary) VALUES
+      (1011, 'Checkout timeouts last month', 'Similar latency spike; tagged P3 and blamed on the database.', 'P3', 'platform', 'database', 'Historical similar incident.'),
+      (1042, 'Checkout p95 latency high',
+       'Checkout p95 latency is 2.4s. There is a spike on checkout-api and payments-worker. A similar incident last month was tagged P3 and blamed on the database.',
+       NULL, NULL, NULL, NULL)
+    ON CONFLICT (id) DO NOTHING;

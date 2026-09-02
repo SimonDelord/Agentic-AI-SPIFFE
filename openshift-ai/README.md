@@ -38,7 +38,7 @@ Enabled OpenShift AI components: **dashboard**, **KServe** (RawDeployment), **ML
 In-cluster URL for the agents (GPU Llama 3.2 3B, once Loaded):
 
 ```text
-MODEL_URL  = http://llama-3-2-3b-instruct-predictor.agentic-llm.svc.cluster.local/v1
+MODEL_URL  = http://llama-3-2-3b-instruct-predictor.agentic-llm.svc.cluster.local:8080/v1
 MODEL_NAME = llama-3-2-3b-instruct
 ```
 
@@ -48,7 +48,7 @@ CPU TinyLlama remains as a fallback at `http://tinyllama-predictor.agentic-llm.s
 
 - KServe is **RawDeployment** so this demo does not need OpenShift Serverless or Service Mesh.
 - TinyLlama is small and not a strong tool-caller. That is a CPU constraint, not the SPIFFE design. When a GPU is available, change `storageUri` / `MODEL_NAME` to a larger instruct model.
-- MLflow is enabled on the DataScienceCluster. The tracking URI is filled in after the MLflow component is Ready.
+- MLflow tracking server: apply `openshift-ai/mlflow/00-mlflow.yaml`. In-cluster URI is `https://mlflow.redhat-ods-applications.svc:8443/mlflow`. Public UI: `https://rh-ai.apps.agentic-ai-demo.sandbox1133.opentlc.com/mlflow`.
 Dashboard after install:
 
 ```bash

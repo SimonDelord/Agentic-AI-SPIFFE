@@ -1,0 +1,27 @@
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: incident-agent
+  namespace: agentic-ai
+spec:
+  lookupPolicy:
+    local: true
+---
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: incident-agent
+  namespace: agentic-ai
+spec:
+  source:
+    type: Binary
+    binary: {}
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: Dockerfile
+  output:
+    to:
+      kind: ImageStreamTag
+      name: incident-agent:latest
+  runPolicy: Serial

@@ -100,9 +100,11 @@ The agents do not embed a model. They call a cluster service.
 OpenShift AI (RHOAI) serves that model, typically as a **KServe InferenceService** running **vLLM**. vLLM speaks the OpenAI chat API, so agent code looks like a normal OpenAI client with a different base URL:
 
 ```text
-MODEL_URL  = http://llama-3-2-3b-instruct-predictor.agentic-llm.svc.cluster.local/v1
+MODEL_URL  = http://llama-3-2-3b-instruct-predictor.agentic-llm.svc.cluster.local:8080/v1
 MODEL_NAME = llama-3-2-3b-instruct
 ```
+
+The predictor Service is headless (`ClusterIP: None`) and maps port 80 to targetPort 8080. Clients must call **:8080**; connecting to port 80 is refused.
 
 Use the **in-cluster Service**, not a public Route. Both agent pods call that same URL. That keeps the “same brain, two identities” experiment honest, and it stays inside the cluster.
 
@@ -222,31 +224,66 @@ That shows three things the text diff cannot:
 
 ---
 
-## What we will add next
+## What is deployed now (before SPIFFE)
 
-This repo starts as the design. Implementation can stay small:
+SPIFFE/SPIRE is **not** configured yet. This phase is two identical agents, one GPU model, MLflow traces, and Postgres in a separate namespace.
 
 ```
 .
-├── README.md                 # this file
-├── openshift-ai/             # OpenShift AI Operator + CPU TinyLlama (KServe)
+├── README.md
+├── openshift-ai/             # Operator, CPU TinyLlama, GPU Llama, MLflow CR
 │   ├── operator/
 │   ├── llm/
-│   └── gpu/                  # g4dn.xlarge MachineSet + NFD + NVIDIA GPU Operator
-├── agent/                    # MCP client: LLM loop → OpenShift AI
+│   ├── gpu/
+│   └── mlflow/
+├── agent/                    # MCP client + incident tools (same image)
 │   ├── app.py
+│   ├── mcp_server.py
 │   ├── Dockerfile
 │   └── requirements.txt
-├── mcp-server/               # incident tools; SPIFFE mTLS to Postgres
-│   ├── server.py
-│   └── requirements.txt
-├── compare/                  # optional local diffs; primary compare is MLflow
-└── k8s/                      # two ServiceAccounts, two ClusterSPIFFEID, one Postgres
+├── postgres/                 # PostgreSQL in namespace agentic-db
+├── k8s/                      # namespace agentic-ai: two Jobs, two ServiceAccounts
+└── compare/
 ```
 
-Same image (agent + MCP server), two SPIRE registrations, one OpenShift AI model, one MLflow tracking server, one database.
+| Piece | Namespace | Notes |
+|--------|-----------|--------|
+| GPU Llama 3.2 3B Instruct | `agentic-llm` | OpenShift AI / vLLM on the T4 |
+| MLflow tracking server | `redhat-ods-applications` | CR `mlflow`; UI `https://rh-ai.apps.agentic-ai-demo.sandbox1133.opentlc.com/mlflow` |
+| Agents `agent-a`, `agent-b` | `agentic-ai` | Same image, two Jobs, two ServiceAccounts |
+| PostgreSQL 16 | `agentic-db` | Password auth (`demo-incidents`) until SPIFFE |
 
-Agent pods get `MODEL_URL`, `MODEL_NAME`, and `MLFLOW_TRACKING_URI` from a ConfigMap. They do not get a database password.
+Run:
+
+```bash
+./postgres/deploy.sh
+oc apply -f openshift-ai/mlflow/00-mlflow.yaml
+./k8s/deploy.sh
+```
+
+Agent pods get `MODEL_URL`, `MODEL_NAME`, and `MLFLOW_TRACKING_URI` from a ConfigMap. They also get `DATABASE_URL` (demo password) until SPIFFE replaces it.
+
+Llama 3.2 3B on this runtime accepts **one tool call per turn**. The agent loop enforces that.
+
+### Sample run (incident 1042)
+
+Both Jobs completed against the GPU model. They disagreed on owner and root cause, then both wrote to Postgres.
+
+| Agent | Job | MLflow run | MLflow trace | Postgres write |
+|--------|-----|------------|--------------|----------------|
+| agent-a | Complete | `6c4024e44e4948e18c2d602bc54112f3` | `tr-0f3a27f8d544088d3652646a6875e141` | severity P2, owner `payments-team`, root_cause `timeout` |
+| agent-b | Complete | `a2a0c9b6585c4855b91b150c1366319f` | `tr-39a7ab5fc4d903fbc064ae42dd194153` | severity P2, owner `payments`, root_cause `checkout-api` |
+
+Public run URLs (workspace `agentic-ai`, experiment `incident-triage`):
+
+- https://rh-ai.apps.agentic-ai-demo.sandbox1133.opentlc.com/mlflow/#/experiments/1/runs/6c4024e44e4948e18c2d602bc54112f3?workspace=agentic-ai
+- https://rh-ai.apps.agentic-ai-demo.sandbox1133.opentlc.com/mlflow/#/experiments/1/runs/a2a0c9b6585c4855b91b150c1366319f?workspace=agentic-ai
+
+The `incidents` row for 1042 holds the last writer (`agent-b`). Table `agent_writes` keeps both payloads.
+
+## Next: SPIFFE/SPIRE
+
+Replace the Postgres password with X.509-SVIDs so `agent-a` and `agent-b` authenticate as different SPIFFE IDs. That is the next change; it is not in this tree yet.
 
 ---
 

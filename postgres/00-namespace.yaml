@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: agentic-db
+  annotations:
+    openshift.io/display-name: Agentic AI PostgreSQL
+    openshift.io/description: Incident database for the SPIFFE agent demo (password auth until SPIFFE is added)

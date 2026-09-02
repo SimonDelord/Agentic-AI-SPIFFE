@@ -1,0 +1,38 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: agent-a
+  namespace: agentic-ai
+  labels:
+    app: incident-agent
+    agent: agent-a
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app: incident-agent
+        agent: agent-a
+    spec:
+      restartPolicy: Never
+      serviceAccountName: agent-a
+      containers:
+        - name: agent
+          image: image-registry.openshift-image-registry.svc:5000/agentic-ai/incident-agent:latest
+          imagePullPolicy: Always
+          env:
+            - name: AGENT_NAME
+              value: agent-a
+          envFrom:
+            - configMapRef:
+                name: agent-config
+            - secretRef:
+                name: postgres-credentials
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi

@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: agentic-ai
+  labels:
+    opendatahub.io/dashboard: "true"
+  annotations:
+    openshift.io/display-name: Agentic AI agents
+    openshift.io/description: Two identical incident-triage agents calling the GPU Llama endpoint
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: agent-a
+  namespace: agentic-ai
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: agent-b
+  namespace: agentic-ai
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: agents-anyuid
+  namespace: agentic-ai
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:openshift:scc:anyuid
+subjects:
+  - kind: ServiceAccount
+    name: agent-a
+    namespace: agentic-ai
+  - kind: ServiceAccount
+    name: agent-b
+    namespace: agentic-ai
+  - kind: ServiceAccount
+    name: builder
+    namespace: agentic-ai
+  - kind: ServiceAccount
+    name: default
+    namespace: agentic-ai

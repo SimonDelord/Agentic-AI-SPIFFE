@@ -1,0 +1,34 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: postgres-seed
+  namespace: agentic-db
+spec:
+  backoffLimit: 8
+  template:
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: postgres
+      containers:
+        - name: seed
+          image: registry.redhat.io/rhel9/postgresql-16:latest
+          envFrom:
+            - secretRef:
+                name: postgres-credentials
+          command:
+            - /bin/bash
+            - -lc
+            - |
+              set -euo pipefail
+              for i in $(seq 1 30); do
+                pg_isready -h postgres.agentic-db.svc.cluster.local -U "$POSTGRES_USER" -d "$POSTGRES_DB" && break
+                sleep 5
+              done
+              psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f /sql/01-schema.sql
+          volumeMounts:
+            - name: sql
+              mountPath: /sql
+      volumes:
+        - name: sql
+          configMap:
+            name: postgres-init

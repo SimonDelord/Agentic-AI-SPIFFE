@@ -231,7 +231,8 @@ This repo starts as the design. Implementation can stay small:
 ├── README.md                 # this file
 ├── openshift-ai/             # OpenShift AI Operator + CPU TinyLlama (KServe)
 │   ├── operator/
-│   └── llm/
+│   ├── llm/
+│   └── gpu/                  # g4dn.xlarge MachineSet + NFD + NVIDIA GPU Operator
 ├── agent/                    # MCP client: LLM loop → OpenShift AI
 │   ├── app.py
 │   ├── Dockerfile

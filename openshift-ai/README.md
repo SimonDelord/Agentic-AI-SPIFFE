@@ -3,10 +3,7 @@
 Install Red Hat OpenShift AI on this cluster, then serve a small chat model
 with KServe RawDeployment and the vLLM **CPU** runtime.
 
-This cluster has **no GPUs** (workers are `m5.4xlarge`). The model is
-TinyLlama 1.1B from an OCI modelcar, which is enough to give agents an
-OpenAI-compatible `/v1/chat/completions` endpoint. Swap the model later if
-you add GPU nodes.
+This cluster starts as CPU-only workers (`m5.4xlarge`). Add a GPU worker from `gpu/` (`g4dn.xlarge`, 1× Tesla T4) when you want a stronger model than CPU TinyLlama.
 
 ## What this folder deploys
 
@@ -14,6 +11,7 @@ you add GPU nodes.
 |------|------|
 | `operator/` | cert-manager (KServe prerequisite) + OpenShift AI Operator `stable-3.x` + `DataScienceCluster` |
 | `llm/` | Data science project, vLLM CPU `ServingRuntime`, TinyLlama `InferenceService` |
+| `gpu/` | Single `g4dn.xlarge` MachineSet + NFD + NVIDIA GPU Operator |
 
 Enabled OpenShift AI components: **dashboard**, **KServe** (RawDeployment), **MLflow**.
 

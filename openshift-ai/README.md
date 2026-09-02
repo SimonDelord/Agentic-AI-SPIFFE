@@ -48,6 +48,7 @@ CPU TinyLlama remains as a fallback at `http://tinyllama-predictor.agentic-llm.s
 
 - KServe is **RawDeployment** so this demo does not need OpenShift Serverless or Service Mesh.
 - TinyLlama is small and not a strong tool-caller. That is a CPU constraint, not the SPIFFE design. When a GPU is available, change `storageUri` / `MODEL_NAME` to a larger instruct model.
+- MLflow is enabled on the DataScienceCluster. The tracking URI is filled in after the MLflow component is Ready.
 Dashboard after install:
 
 ```bash

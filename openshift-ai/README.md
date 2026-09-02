@@ -10,7 +10,7 @@ This cluster starts as CPU-only workers (`m5.4xlarge`). Add a GPU worker from `g
 | Step | What |
 |------|------|
 | `operator/` | cert-manager (KServe prerequisite) + OpenShift AI Operator `stable-3.x` + `DataScienceCluster` |
-| `llm/` | Data science project, vLLM CPU `ServingRuntime`, TinyLlama `InferenceService` |
+| `llm/` | TinyLlama on CPU, then Llama 3.2 3B Instruct on the T4 (`deploy-gpu.sh`) |
 | `gpu/` | Single `g4dn.xlarge` MachineSet + NFD + NVIDIA GPU Operator |
 
 Enabled OpenShift AI components: **dashboard**, **KServe** (RawDeployment), **MLflow**.
@@ -27,19 +27,22 @@ Enabled OpenShift AI components: **dashboard**, **KServe** (RawDeployment), **ML
 # 1. cert-manager + OpenShift AI Operator + DataScienceCluster
 ./openshift-ai/operator/deploy.sh
 
-# 2. CPU LLM (after the DSC is Ready)
+# 2. CPU LLM (optional fallback)
 ./openshift-ai/llm/deploy.sh
 
-# 3. Smoke-test the OpenAI-compatible API
-./openshift-ai/llm/verify.sh
+# 3. GPU LLM on the T4 (after gpu/ is Ready)
+./openshift-ai/llm/deploy-gpu.sh
+./openshift-ai/llm/verify-gpu.sh
 ```
 
-In-cluster URL for the agents (once the predictor is Ready):
+In-cluster URL for the agents (GPU Llama 3.2 3B, once Loaded):
 
 ```text
-MODEL_URL  = http://tinyllama-predictor.agentic-llm.svc.cluster.local/v1
-MODEL_NAME = tinyllama
+MODEL_URL  = http://llama-3-2-3b-instruct-predictor.agentic-llm.svc.cluster.local/v1
+MODEL_NAME = llama-3-2-3b-instruct
 ```
+
+CPU TinyLlama remains as a fallback at `http://tinyllama-predictor.agentic-llm.svc.cluster.local/v1`.
 
 ## Notes
 

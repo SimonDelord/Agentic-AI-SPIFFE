@@ -100,8 +100,8 @@ The agents do not embed a model. They call a cluster service.
 OpenShift AI (RHOAI) serves that model, typically as a **KServe InferenceService** running **vLLM**. vLLM speaks the OpenAI chat API, so agent code looks like a normal OpenAI client with a different base URL:
 
 ```text
-MODEL_URL  = http://tinyllama-predictor.agentic-llm.svc.cluster.local/v1
-MODEL_NAME = tinyllama
+MODEL_URL  = http://llama-3-2-3b-instruct-predictor.agentic-llm.svc.cluster.local/v1
+MODEL_NAME = llama-3-2-3b-instruct
 ```
 
 Use the **in-cluster Service**, not a public Route. Both agent pods call that same URL. That keeps the “same brain, two identities” experiment honest, and it stays inside the cluster.

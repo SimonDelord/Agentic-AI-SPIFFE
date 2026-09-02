@@ -1,0 +1,32 @@
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: llama-3-2-3b-instruct
+  namespace: agentic-llm
+  annotations:
+    serving.kserve.io/deploymentMode: RawDeployment
+    security.opendatahub.io/enable-auth: "false"
+    openshift.io/display-name: llama-3-2-3b-instruct
+    opendatahub.io/model-type: generative
+  labels:
+    opendatahub.io/dashboard: "true"
+spec:
+  predictor:
+    minReplicas: 1
+    maxReplicas: 1
+    nodeSelector:
+      nvidia.com/gpu.present: "true"
+    model:
+      modelFormat:
+        name: vLLM
+      runtime: vllm-cuda
+      storageUri: oci://quay.io/redhat-ai-services/modelcar-catalog:llama-3.2-3b-instruct
+      resources:
+        requests:
+          cpu: "2"
+          memory: 8Gi
+          nvidia.com/gpu: "1"
+        limits:
+          cpu: "3"
+          memory: 12Gi
+          nvidia.com/gpu: "1"

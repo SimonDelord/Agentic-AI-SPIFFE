@@ -1,0 +1,33 @@
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: tinyllama
+  namespace: agentic-llm
+  annotations:
+    serving.kserve.io/deploymentMode: RawDeployment
+    security.opendatahub.io/enable-auth: "false"
+    openshift.io/display-name: tinyllama
+    opendatahub.io/model-type: generative
+  labels:
+    opendatahub.io/dashboard: "true"
+spec:
+  predictor:
+    minReplicas: 1
+    maxReplicas: 1
+    model:
+      modelFormat:
+        name: vLLM
+      runtime: vllm-cpu
+      storageUri: oci://quay.io/rh-aiservices-bu/tinyllama:1.0
+      resources:
+        requests:
+          cpu: "4"
+          memory: 8Gi
+        limits:
+          cpu: "8"
+          memory: 16Gi
+      env:
+        - name: HF_HOME
+          value: /tmp/hf_home
+        - name: VLLM_CPU_KVCACHE_SPACE
+          value: "4"

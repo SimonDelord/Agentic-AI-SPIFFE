@@ -100,8 +100,8 @@ The agents do not embed a model. They call a cluster service.
 OpenShift AI (RHOAI) serves that model, typically as a **KServe InferenceService** running **vLLM**. vLLM speaks the OpenAI chat API, so agent code looks like a normal OpenAI client with a different base URL:
 
 ```text
-MODEL_URL  = http://<inference-service>.<data-science-project>.svc.cluster.local:8080/v1
-MODEL_NAME = the served model id (for example llama-3-1-8b-instruct)
+MODEL_URL  = http://tinyllama-predictor.agentic-llm.svc.cluster.local/v1
+MODEL_NAME = tinyllama
 ```
 
 Use the **in-cluster Service**, not a public Route. Both agent pods call that same URL. That keeps the “same brain, two identities” experiment honest, and it stays inside the cluster.
@@ -229,6 +229,9 @@ This repo starts as the design. Implementation can stay small:
 ```
 .
 ├── README.md                 # this file
+├── openshift-ai/             # OpenShift AI Operator + CPU TinyLlama (KServe)
+│   ├── operator/
+│   └── llm/
 ├── agent/                    # MCP client: LLM loop → OpenShift AI
 │   ├── app.py
 │   ├── Dockerfile
@@ -250,7 +253,7 @@ Agent pods get `MODEL_URL`, `MODEL_NAME`, and `MLFLOW_TRACKING_URI` from a Confi
 
 - [SPIFFE-SPIRE-demo](https://github.com/SimonDelord/SPIFFE-SPIRE-demo) — SPIFFE/SPIRE on OpenShift, including the EDB/PostgreSQL mTLS use case
 - [SPIFFE-PostgreSQL](https://github.com/SimonDelord/SPIFFE-PostgreSQL) — X.509 and JWT SVID authentication to PostgreSQL
-- [OpenShift AI](https://www.redhat.com/en/technologies/cloud-computing/openshift/openshift-ai) — in-cluster model serving (KServe / vLLM) and MLflow
+- [OpenShift AI](openshift-ai/README.md) — operator + CPU TinyLlama on this cluster
 - [MLflow tracing](https://mlflow.org/docs/latest/genai/tracing/) — LLM and MCP spans per agent run
 - [How AI observability works with MLflow](https://developers.redhat.com/articles/2026/08/26/how-ai-observability-works-mlflow) — Red Hat on agent traces
 - [Model Context Protocol](https://modelcontextprotocol.io/) — agent (client) to incident tools (server)

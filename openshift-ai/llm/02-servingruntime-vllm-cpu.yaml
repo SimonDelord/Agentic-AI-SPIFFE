@@ -1,0 +1,47 @@
+apiVersion: serving.kserve.io/v1alpha1
+kind: ServingRuntime
+metadata:
+  name: vllm-cpu
+  namespace: agentic-llm
+  annotations:
+    opendatahub.io/accelerator-name: ""
+    opendatahub.io/apiProtocol: REST
+    opendatahub.io/recommended-accelerators: ""
+    opendatahub.io/template-display-name: vLLM CPU (x86) ServingRuntime for KServe
+    opendatahub.io/template-name: vllm-cpu
+    openshift.io/display-name: vLLM CPU (x86) ServingRuntime for KServe
+  labels:
+    opendatahub.io/dashboard: "true"
+spec:
+  builtInAdapter:
+    modelLoadingTimeoutMillis: 90000
+  containers:
+    - name: kserve-container
+      image: registry.redhat.io/rhaii/vllm-cpu-rhel9@sha256:cf6577f6d526561651df5390aad916c53820a18a1659e3fb39c1c5a62aef0e3c
+      args:
+        - --model
+        - /mnt/models
+        - --port
+        - "8080"
+        - --max-model-len
+        - "2048"
+        - --served-model-name
+        - tinyllama
+        - --enable-auto-tool-choice
+        - --tool-call-parser
+        - hermes
+      env:
+        - name: VLLM_CPU_KVCACHE_SPACE
+          value: "4"
+        - name: HF_HOME
+          value: /tmp/hf_home
+        - name: LD_PRELOAD
+          value: /usr/lib64/libomp.so
+      ports:
+        - containerPort: 8080
+          name: http1
+          protocol: TCP
+  multiModel: false
+  supportedModelFormats:
+    - autoSelect: true
+      name: vLLM

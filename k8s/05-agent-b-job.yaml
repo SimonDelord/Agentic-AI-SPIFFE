@@ -29,6 +29,10 @@ spec:
                 name: agent-config
             - secretRef:
                 name: postgres-credentials
+          volumeMounts:
+            - name: spiffe-workload-api
+              mountPath: /spiffe-workload-api
+              readOnly: true
           resources:
             requests:
               cpu: 100m
@@ -36,3 +40,8 @@ spec:
             limits:
               cpu: "1"
               memory: 1Gi
+      volumes:
+        - name: spiffe-workload-api
+          csi:
+            driver: csi.spiffe.io
+            readOnly: true

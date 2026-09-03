@@ -224,9 +224,9 @@ That shows three things the text diff cannot:
 
 ---
 
-## What is deployed now (before SPIFFE)
+## What is deployed now
 
-SPIFFE/SPIRE is **not** configured yet. This phase is two identical agents, one GPU model, MLflow traces, and Postgres in a separate namespace.
+Two identical agents, one GPU model, MLflow traces, Postgres in a separate namespace, and SPIRE identities stamped on each DB write. Postgres still uses the demo password (no mTLS yet).
 
 ```
 .
@@ -239,9 +239,11 @@ SPIFFE/SPIRE is **not** configured yet. This phase is two identical agents, one 
 ├── agent/                    # MCP client + incident tools (same image)
 │   ├── app.py
 │   ├── mcp_server.py
+│   ├── identity.py           # fetch SPIFFE ID from Workload API
 │   ├── Dockerfile
 │   └── requirements.txt
 ├── postgres/                 # PostgreSQL in namespace agentic-db
+├── spire/                    # Zero Trust Workload Identity Manager + ClusterSPIFFEID
 ├── k8s/                      # namespace agentic-ai: two Jobs, two ServiceAccounts
 └── compare/
 ```
@@ -250,40 +252,49 @@ SPIFFE/SPIRE is **not** configured yet. This phase is two identical agents, one 
 |--------|-----------|--------|
 | GPU Llama 3.2 3B Instruct | `agentic-llm` | OpenShift AI / vLLM on the T4 |
 | MLflow tracking server | `redhat-ods-applications` | CR `mlflow`; UI `https://rh-ai.apps.agentic-ai-demo.sandbox1133.opentlc.com/mlflow` |
-| Agents `agent-a`, `agent-b` | `agentic-ai` | Same image, two Jobs, two ServiceAccounts |
-| PostgreSQL 16 | `agentic-db` | Password auth (`demo-incidents`) until SPIFFE |
+| Agents `agent-a`, `agent-b` | `agentic-ai` | Same image, two Jobs, two ServiceAccounts, CSI socket |
+| PostgreSQL 16 | `agentic-db` | Password auth (`demo-incidents`); `spiffe_id` columns |
+| SPIRE | `zero-trust-workload-identity-manager` | ZTWIM operator; CSI driver `csi.spiffe.io` |
 
 Run:
 
 ```bash
+./spire/deploy.sh
 ./postgres/deploy.sh
 oc apply -f openshift-ai/mlflow/00-mlflow.yaml
 ./k8s/deploy.sh
 ```
 
-Agent pods get `MODEL_URL`, `MODEL_NAME`, and `MLFLOW_TRACKING_URI` from a ConfigMap. They also get `DATABASE_URL` (demo password) until SPIFFE replaces it.
+Each agent fetches its X.509-SVID from SPIRE and writes `spiffe_id` on `incidents` and `agent_writes`. Expected IDs:
+
+```text
+spiffe://apps.agentic-ai-demo.sandbox1133.opentlc.com/ns/agentic-ai/sa/agent-a
+spiffe://apps.agentic-ai-demo.sandbox1133.opentlc.com/ns/agentic-ai/sa/agent-b
+```
 
 Llama 3.2 3B on this runtime accepts **one tool call per turn**. The agent loop enforces that.
 
 ### Sample run (incident 1042)
 
-Both Jobs completed against the GPU model. They disagreed on owner and root cause, then both wrote to Postgres.
+First run (no SPIFFE yet) disagreed on owner and root cause. The SPIFFE-stamped rerun issued real SVIDs and wrote them into Postgres (password auth still).
 
-| Agent | Job | MLflow run | MLflow trace | Postgres write |
-|--------|-----|------------|--------------|----------------|
-| agent-a | Complete | `6c4024e44e4948e18c2d602bc54112f3` | `tr-0f3a27f8d544088d3652646a6875e141` | severity P2, owner `payments-team`, root_cause `timeout` |
-| agent-b | Complete | `a2a0c9b6585c4855b91b150c1366319f` | `tr-39a7ab5fc4d903fbc064ae42dd194153` | severity P2, owner `payments`, root_cause `checkout-api` |
+| Agent | Job | SPIFFE ID | MLflow run | Trace |
+|--------|-----|-----------|------------|--------|
+| agent-a | Complete | `spiffe://apps.agentic-ai-demo.sandbox1133.opentlc.com/ns/agentic-ai/sa/agent-a` | `9d3e7d933dca4bc79e1ce0bd6f68d557` | `tr-9afad38b2fa39d81f8a9f2a06bc8f117` |
+| agent-b | Complete | `spiffe://apps.agentic-ai-demo.sandbox1133.opentlc.com/ns/agentic-ai/sa/agent-b` | `2fc2d137f5b140f98ff38581673ba88c` | `tr-0839a6521cc90421d16c96bea958d587` |
 
 Public run URLs (workspace `agentic-ai`, experiment `incident-triage`):
 
-- https://rh-ai.apps.agentic-ai-demo.sandbox1133.opentlc.com/mlflow/#/experiments/1/runs/6c4024e44e4948e18c2d602bc54112f3?workspace=agentic-ai
-- https://rh-ai.apps.agentic-ai-demo.sandbox1133.opentlc.com/mlflow/#/experiments/1/runs/a2a0c9b6585c4855b91b150c1366319f?workspace=agentic-ai
+- https://rh-ai.apps.agentic-ai-demo.sandbox1133.opentlc.com/mlflow/#/experiments/1/runs/9d3e7d933dca4bc79e1ce0bd6f68d557?workspace=agentic-ai
+- https://rh-ai.apps.agentic-ai-demo.sandbox1133.opentlc.com/mlflow/#/experiments/1/runs/2fc2d137f5b140f98ff38581673ba88c?workspace=agentic-ai
 
-The `incidents` row for 1042 holds the last writer (`agent-b`). Table `agent_writes` keeps both payloads.
+The `incidents` row for 1042 holds the last writer (`agent-a`) including `spiffe_id`. Table `agent_writes` keeps every payload; rows 3 and 4 have SPIFFE IDs, rows 1 and 2 do not.
 
-## Next: SPIFFE/SPIRE
+## Next: SPIFFE mTLS into Postgres
 
-Replace the Postgres password with X.509-SVIDs so `agent-a` and `agent-b` authenticate as different SPIFFE IDs. That is the next change; it is not in this tree yet.
+This phase stamps SPIFFE IDs on the rows. The next change is to replace the
+Postgres password with X.509-SVID mTLS so `agent-a` and `agent-b` authenticate
+as different SPIFFE IDs. That is not enabled yet.
 
 ---
 

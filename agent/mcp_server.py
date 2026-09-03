@@ -1,8 +1,7 @@
 """Incident MCP server. Tools talk to PostgreSQL.
 
-This process runs in the same pod as the agent (stdio). Postgres therefore
-sees the agent workload identity, not a shared remote MCP service.
-SPIFFE mTLS is not wired yet; DATABASE_URL is password auth for this phase.
+This process runs in the same pod as the agent. Postgres still uses password
+auth; the pod's SPIFFE ID is stamped on each write (spiffe_id column).
 """
 
 from __future__ import annotations
@@ -19,6 +18,10 @@ DATABASE_URL = os.environ.get(
     "postgresql://app:demo-incidents@postgres.agentic-db.svc.cluster.local:5432/incidents",
 )
 AGENT_NAME = os.environ.get("AGENT_NAME", "unknown-agent")
+
+
+def _spiffe_id() -> str:
+    return os.environ.get("SPIFFE_ID", "")
 
 
 def _conn():
@@ -78,12 +81,14 @@ def update_incident(
     summary: str,
 ) -> str:
     """Write the agent's triage decision back to Postgres."""
+    spiffe_id = _spiffe_id()
     payload = {
         "severity": severity,
         "owner": owner,
         "root_cause": root_cause,
         "summary": summary,
         "agent_name": AGENT_NAME,
+        "spiffe_id": spiffe_id,
     }
     with _conn() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -95,20 +100,21 @@ def update_incident(
                     root_cause = %s,
                     summary = %s,
                     agent_name = %s,
+                    spiffe_id = %s,
                     updated_at = now()
                 WHERE id = %s
                 RETURNING *
                 """,
-                (severity, owner, root_cause, summary, AGENT_NAME, incident_id),
+                (severity, owner, root_cause, summary, AGENT_NAME, spiffe_id, incident_id),
             )
             row = cur.fetchone()
             cur.execute(
                 """
-                INSERT INTO agent_writes (incident_id, agent_name, payload)
-                VALUES (%s, %s, %s::jsonb)
-                RETURNING id, incident_id, agent_name, written_at
+                INSERT INTO agent_writes (incident_id, agent_name, spiffe_id, payload)
+                VALUES (%s, %s, %s, %s::jsonb)
+                RETURNING id, incident_id, agent_name, spiffe_id, written_at
                 """,
-                (incident_id, AGENT_NAME, json.dumps(payload)),
+                (incident_id, AGENT_NAME, spiffe_id, json.dumps(payload)),
             )
             write = cur.fetchone()
     if not row:

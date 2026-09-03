@@ -19,4 +19,4 @@ oc wait --for=condition=complete job/postgres-seed -n agentic-db --timeout=3m
 echo "Seed complete. Sample rows:"
 oc exec -n agentic-db deploy/postgres -- \
   env PGPASSWORD=demo-incidents \
-  psql -U app -d incidents -c "SELECT id, title, severity, agent_name FROM incidents ORDER BY id;"
+  psql -U app -d incidents -c "SELECT id, title, severity, agent_name, spiffe_id FROM incidents ORDER BY id;"

@@ -9,6 +9,7 @@ oc apply -f "${ROOT}/k8s/01-configmap.yaml"
 oc apply -f "${ROOT}/k8s/02-db-secret.yaml"
 oc apply -f "${ROOT}/k8s/03-build.yaml"
 oc apply -f "${ROOT}/k8s/06-mlflow-rbac.yaml"
+oc apply -f "${ROOT}/spire/07-clusterspiffeid.yaml"
 
 echo "Starting binary build from ${ROOT}/agent"
 oc start-build incident-agent -n "${NS}" --from-dir="${ROOT}/agent" --follow --wait

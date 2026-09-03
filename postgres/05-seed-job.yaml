@@ -25,6 +25,7 @@ spec:
                 sleep 5
               done
               psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f /sql/01-schema.sql
+              psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f /sql/02-migrate.sql
           volumeMounts:
             - name: sql
               mountPath: /sql

@@ -1,0 +1,15 @@
+apiVersion: spire.spiffe.io/v1alpha1
+kind: ClusterSPIFFEID
+metadata:
+  name: agentic-ai-agents
+spec:
+  className: zero-trust-workload-identity-manager-spire
+  spiffeIDTemplate: "spiffe://{{ .TrustDomain }}/ns/{{ .PodMeta.Namespace }}/sa/{{ .PodSpec.ServiceAccountName }}"
+  podSelector:
+    matchLabels:
+      app: incident-agent
+  namespaceSelector:
+    matchLabels:
+      kubernetes.io/metadata.name: agentic-ai
+  jwtTtl: 5m
+  ttl: 1h

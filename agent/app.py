@@ -1,7 +1,8 @@
 """Incident-triage agent: MCP client + OpenAI-compatible loop against OpenShift AI.
 
 Same image is run twice (agent-a, agent-b) against the same GPU Llama endpoint.
-SPIFFE is not wired yet; AGENT_NAME is the identity tag for this phase.
+Each pod fetches its X.509-SVID from SPIRE and stamps spiffe_id on Postgres writes.
+DB auth is still the demo password (no mTLS yet).
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ from typing import Any
 
 from openai import OpenAI
 
+import identity
 import mcp_server
 
 MODEL_URL = os.environ.get(
@@ -306,6 +308,9 @@ def run_agent(tracer: Tracer) -> str:
 
 def main() -> int:
     print(f"agent={AGENT_NAME} incident={INCIDENT_ID} model={MODEL_NAME} url={MODEL_URL}", flush=True)
+    spiffe_id = identity.fetch_spiffe_id()
+    os.environ["SPIFFE_ID"] = spiffe_id
+    print(f"spiffe_id={spiffe_id}", flush=True)
     mlflow = _setup_mlflow()
     tracer = Tracer(mlflow)
     run_ctx = None
@@ -317,8 +322,9 @@ def main() -> int:
                 {
                     "agent": AGENT_NAME,
                     "incident_id": str(INCIDENT_ID),
+                    "spiffe_id": spiffe_id,
                     "model": MODEL_NAME,
-                    "phase": "password-postgres",
+                    "phase": "spiffe-stamp-password-postgres",
                 }
             )
             print(f"mlflow_run_id={run.info.run_id}", flush=True)
@@ -332,6 +338,7 @@ def main() -> int:
             "agent_loop",
             agent=AGENT_NAME,
             incident_id=INCIDENT_ID,
+            spiffe_id=spiffe_id,
             model=MODEL_NAME,
         ):
             final = run_agent(tracer)
@@ -341,6 +348,7 @@ def main() -> int:
                 mlflow.log_text(json.dumps(tracer.events, default=str, indent=2), "trace.json")
                 mlflow.log_param("agent", AGENT_NAME)
                 mlflow.log_param("incident_id", INCIDENT_ID)
+                mlflow.log_param("spiffe_id", spiffe_id)
             except Exception as exc:  # noqa: BLE001
                 print(f"mlflow.log_text failed: {exc}", flush=True)
             try:

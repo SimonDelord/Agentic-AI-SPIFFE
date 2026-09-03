@@ -20,6 +20,7 @@ data:
       root_cause TEXT,
       summary TEXT,
       agent_name TEXT,
+      spiffe_id TEXT,
       updated_at TIMESTAMPTZ DEFAULT now()
     );
 
@@ -27,6 +28,7 @@ data:
       id SERIAL PRIMARY KEY,
       incident_id INTEGER NOT NULL REFERENCES incidents(id),
       agent_name TEXT NOT NULL,
+      spiffe_id TEXT,
       payload JSONB NOT NULL,
       written_at TIMESTAMPTZ DEFAULT now()
     );
@@ -43,3 +45,7 @@ data:
        'Checkout p95 latency is 2.4s. There is a spike on checkout-api and payments-worker. A similar incident last month was tagged P3 and blamed on the database.',
        NULL, NULL, NULL, NULL)
     ON CONFLICT (id) DO NOTHING;
+
+  02-migrate.sql: |
+    ALTER TABLE incidents ADD COLUMN IF NOT EXISTS spiffe_id TEXT;
+    ALTER TABLE agent_writes ADD COLUMN IF NOT EXISTS spiffe_id TEXT;

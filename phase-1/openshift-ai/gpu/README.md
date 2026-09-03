@@ -14,8 +14,10 @@ A GPU node does nothing for KServe until **Node Feature Discovery** and the **NV
 
 ## Apply
 
+From the repo root:
+
 ```bash
-./openshift-ai/gpu/deploy.sh
+./phase-1/openshift-ai/gpu/deploy.sh
 ```
 
 Wait until:

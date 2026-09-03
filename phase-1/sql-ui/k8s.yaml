@@ -1,0 +1,122 @@
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: sql-ui
+  namespace: agentic-ai
+spec:
+  lookupPolicy:
+    local: true
+---
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: sql-ui
+  namespace: agentic-ai
+spec:
+  source:
+    type: Binary
+    binary: {}
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: Dockerfile
+  output:
+    to:
+      kind: ImageStreamTag
+      name: sql-ui:latest
+  runPolicy: Serial
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sql-ui
+  namespace: agentic-ai
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sql-ui-anyuid
+  namespace: agentic-ai
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:openshift:scc:anyuid
+subjects:
+  - kind: ServiceAccount
+    name: sql-ui
+    namespace: agentic-ai
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sql-ui
+  namespace: agentic-ai
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sql-ui
+  template:
+    metadata:
+      labels:
+        app: sql-ui
+    spec:
+      serviceAccountName: sql-ui
+      containers:
+        - name: sql-ui
+          image: image-registry.openshift-image-registry.svc:5000/agentic-ai/sql-ui:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: INCIDENT_ID
+              value: "1042"
+            - name: WRITE_LIMIT
+              value: "10"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: DATABASE_URL
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sql-ui
+  namespace: agentic-ai
+spec:
+  selector:
+    app: sql-ui
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: sql-ui
+  namespace: agentic-ai
+spec:
+  to:
+    kind: Service
+    name: sql-ui
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

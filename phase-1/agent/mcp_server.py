@@ -1,7 +1,7 @@
 """Incident MCP server. Tools talk to PostgreSQL.
 
-This process runs in the same pod as the agent. Postgres still uses password
-auth; the pod's SPIFFE ID is stamped on each write (spiffe_id column).
+This process runs in the same pod as the agent. `incidents` is read-only
+input; each triage is appended to `agent_writes` with the pod's SPIFFE ID.
 """
 
 from __future__ import annotations
@@ -63,7 +63,8 @@ def list_similar_incidents(query: str) -> str:
                 """
                 SELECT id, title, severity, owner, root_cause, summary
                 FROM incidents
-                WHERE title ILIKE %s OR alert_text ILIKE %s
+                WHERE (title ILIKE %s OR alert_text ILIKE %s)
+                  AND severity IS NOT NULL
                 ORDER BY id
                 LIMIT 10
                 """,
@@ -80,7 +81,7 @@ def update_incident(
     root_cause: str,
     summary: str,
 ) -> str:
-    """Write the agent's triage decision back to Postgres."""
+    """Append the agent's triage to agent_writes. incidents is read-only."""
     spiffe_id = _spiffe_id()
     payload = {
         "severity": severity,
@@ -92,22 +93,10 @@ def update_incident(
     }
     with _conn() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute(
-                """
-                UPDATE incidents
-                SET severity = %s,
-                    owner = %s,
-                    root_cause = %s,
-                    summary = %s,
-                    agent_name = %s,
-                    spiffe_id = %s,
-                    updated_at = now()
-                WHERE id = %s
-                RETURNING *
-                """,
-                (severity, owner, root_cause, summary, AGENT_NAME, spiffe_id, incident_id),
-            )
-            row = cur.fetchone()
+            cur.execute("SELECT id, title FROM incidents WHERE id = %s", (incident_id,))
+            incident = cur.fetchone()
+            if not incident:
+                return _dump({"error": f"incident {incident_id} not found"})
             cur.execute(
                 """
                 INSERT INTO agent_writes (incident_id, agent_name, spiffe_id, payload)
@@ -117,9 +106,7 @@ def update_incident(
                 (incident_id, AGENT_NAME, spiffe_id, json.dumps(payload)),
             )
             write = cur.fetchone()
-    if not row:
-        return _dump({"error": f"incident {incident_id} not found"})
-    return _dump({"incident": dict(row), "write": dict(write)})
+    return _dump({"incident": dict(incident), "write": dict(write), "payload": payload})
 
 
 TOOL_FUNCS = {

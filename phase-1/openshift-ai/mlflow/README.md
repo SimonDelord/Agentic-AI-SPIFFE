@@ -4,7 +4,7 @@ Cluster-scoped `MLflow` CR named `mlflow` (OpenShift AI 3.x operator). SQLite
 backend plus a PVC for this demo.
 
 ```bash
-oc apply -f openshift-ai/mlflow/00-mlflow.yaml
+oc apply -f phase-1/openshift-ai/mlflow/00-mlflow.yaml
 oc get mlflow mlflow -o yaml
 oc get svc,route,pod -n redhat-ods-applications -l app.kubernetes.io/name=mlflow
 ```
@@ -22,5 +22,5 @@ MLFLOW_TRACKING_INSECURE_TLS=true
 Public UI: https://rh-ai.apps.agentic-ai-demo.sandbox1133.opentlc.com/mlflow
 
 Agent ServiceAccounts need `edit` plus `mlflow-operator-mlflow-integration` in
-`agentic-ai` (`k8s/06-mlflow-rbac.yaml`). The agent image installs
+`agentic-ai` (`phase-1/k8s/06-mlflow-rbac.yaml`). The agent image installs
 `mlflow[kubernetes]`. SPIFFE is not involved in this hop.
